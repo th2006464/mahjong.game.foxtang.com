@@ -32,7 +32,7 @@ function pauseForMenu(){if(ended||animating)return false;if(!paused){elapsedBase
 function resumeFromMenu(){if(ended||!menuPaused)return;menuPaused=false;startedAt=Date.now();paused=false;startMusic();status('游戏继续')}
 function openSettings(){if(!pauseForMenu())return;$('settingsModal').classList.remove('hidden');status('设置已打开，本局计时暂停')}
 function beginGame(){if(ended)return;const minutes=Math.max(1,Math.min(99,Number($('countdownMinutes').value)||3));timeLimitSeconds=minutes*60;$('startModal').classList.add('hidden');menuPaused=false;startedAt=Date.now();paused=false;startMusic();status(gameMode==='countdown'?`倒计时 ${minutes} 分钟已开始`:'点击相邻同牌，或拖动麻将进入空位');checkGameState()}
-function openRestartConfirm(){if(paused||ended||animating)return;elapsedBase=elapsed();paused=true;bgMusic.pause();$('restartModal').classList.remove('hidden');status('请确认是否重新开始')}
+function openRestartConfirm(){if(ended){fresh();return}if(paused||animating)return;elapsedBase=elapsed();paused=true;bgMusic.pause();$('restartModal').classList.remove('hidden');status('请确认是否重新开始')}
 function cancelRestart(){if(ended)return;$('restartModal').classList.add('hidden');startedAt=Date.now();paused=false;startMusic();status('继续当前游戏')}
 function status(t){$('status').textContent=t}
 function inside(r,c){return r>=0&&r<ROWS&&c>=0&&c<COLS}
@@ -210,7 +210,7 @@ async function syncPendingScores(){
 function readPendingSaves(){try{const saves=JSON.parse(localStorage.getItem(PENDING_SAVE_KEY)||'[]');return Array.isArray(saves)?saves:[]}catch{return []}}
 function queuePendingSave(payload){const pending=readPendingSaves().filter(item=>item.saveId!==payload.saveId);pending.push(payload);localStorage.setItem(PENDING_SAVE_KEY,JSON.stringify(pending.slice(-30)))}
 function clearPendingSave(saveId){localStorage.setItem(PENDING_SAVE_KEY,JSON.stringify(readPendingSaves().filter(item=>item.saveId!==saveId)))}
-async function uploadSave(payload){const response=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!response.ok)throw new Error('upload failed');clearPendingSave(payload.saveId)}
+async function uploadSave(payload){const response=await boundedFetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!response.ok)throw new Error('upload failed');clearPendingSave(payload.saveId)}
 async function syncPendingSaves(){if(!navigator.onLine)return 0;let synced=0;for(const payload of readPendingSaves()){try{await uploadSave(payload);synced++}catch{break}}if(synced)status(`已自动同步 ${synced} 个离线存档`);return synced}
 function applySave(data){
   const state=typeof data.gameState==='string'?JSON.parse(data.gameState):data.gameState;
