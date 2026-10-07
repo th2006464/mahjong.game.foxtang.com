@@ -109,7 +109,8 @@ export default {
         await env.DB.prepare(`
           INSERT INTO mahjong_scores(id, client_id, player_name, score, duration_seconds, ended_at)
           VALUES (?, ?, ?, ?, ?, ?)
-        `).bind(crypto.randomUUID(), body.clientId, cleanName(body.playerName), score, duration, new Date().toISOString()).run();
+          ON CONFLICT(id) DO NOTHING
+        `).bind(validId(body.recordId)?body.recordId:crypto.randomUUID(), body.clientId, cleanName(body.playerName), score, duration, Number.isFinite(Date.parse(body.endedAt))?new Date(body.endedAt).toISOString():new Date().toISOString()).run();
         return json({ ok: true });
       }
     } catch (error) {

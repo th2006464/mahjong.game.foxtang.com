@@ -201,7 +201,9 @@ snapshot() 当前保存：
 
 ## PWA 和离线模式
 
-public/service-worker.js 当前缓存版本为 mahjong-shell-v4。核心缓存包含首页、参考入口、manifest、图标和参考图集；手动下载还包含背景音乐和消除音效。
+public/service-worker.js 当前缓存版本为 mahjong-shell-v5。核心缓存包含首页、参考入口、manifest、图标和参考图集；手动下载还包含背景音乐和消除音效。
+
+结束游戏会立即显示结算弹窗，先将成绩写入 mahjong-pending-scores 本机队列，再尝试上传。离线、超时或服务端失败时保留队列；联网事件和重新启动都会重试。请求使用固定 recordId，D1 通过 ON CONFLICT(id) DO NOTHING 防止重复成绩。endedAt 保留实际结束时间。上传请求有 6 秒超时，不阻塞关闭弹窗和再来一局。浏览器网站数据被清除后，尚未上传的本机记录会丢失。
 
 导航使用缓存优先，保证飞行模式冷启动不等待网络。设置中的“下载离线版”通过 DOWNLOAD_OFFLINE 消息下载全部资源，CHECK_OFFLINE 检查完成状态。
 
