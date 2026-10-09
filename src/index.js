@@ -17,11 +17,11 @@ export default {
 
       if (url.pathname === '/api/leaderboard' && request.method === 'GET') {
         const { results } = await env.DB.prepare(`
-          SELECT player_name AS playerName, score, duration_seconds AS durationSeconds,
+          SELECT id AS recordId, player_name AS playerName, score, duration_seconds AS durationSeconds,
                  ended_at AS recordedAt, 'completed' AS recordType
           FROM mahjong_scores
           UNION ALL
-          SELECT player_name AS playerName, score, elapsed_seconds AS durationSeconds,
+          SELECT id AS recordId, player_name AS playerName, score, elapsed_seconds AS durationSeconds,
                  saved_at AS recordedAt, 'saved' AS recordType
           FROM mahjong_save_history
           ORDER BY score DESC, durationSeconds ASC, recordedAt DESC
