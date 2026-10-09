@@ -28,9 +28,9 @@ function startMusic(){if(!paused&&!ended&&bgMusic.paused)bgMusic.play().catch(()
 function playMatchSound(){matchSound.currentTime=0;matchSound.play().catch(()=>{})}
 function pauseGame(){if(paused||ended||animating)return;elapsedBase=elapsed();paused=true;bgMusic.pause();$('pauseModal').classList.remove('hidden');status('游戏已暂停');maybeShowUpdate()}
 function resumeGame(){if(ended)return;startedAt=Date.now();paused=false;$('pauseModal').classList.add('hidden');startMusic();status('游戏继续')}
-function pauseForMenu(){if(ended||animating)return false;if(!paused){elapsedBase=elapsed();paused=true;menuPaused=true;bgMusic.pause()}maybeShowUpdate();return true}
+function pauseForMenu(){if(animating)return false;if(!paused){elapsedBase=elapsed();paused=true;menuPaused=true;bgMusic.pause()}maybeShowUpdate();return true}
 function resumeFromMenu(){if(ended||!menuPaused)return;menuPaused=false;startedAt=Date.now();paused=false;startMusic();status('游戏继续')}
-function openSettings(){if(!pauseForMenu())return;$('settingsModal').classList.remove('hidden');status('设置已打开，本局计时暂停')}
+function openSettings(){if(!pauseForMenu())return;$('settingsNewGame').classList.toggle('hidden',!ended);$('settingsModal').classList.remove('hidden');status(ended?'本局已结束，可开始新的一局':'设置已打开，本局计时暂停')}
 function beginGame(){if(ended)return;const minutes=Math.max(1,Math.min(99,Number($('countdownMinutes').value)||3));timeLimitSeconds=minutes*60;$('startModal').classList.add('hidden');menuPaused=false;startedAt=Date.now();paused=false;startMusic();status(gameMode==='countdown'?`倒计时 ${minutes} 分钟已开始`:'点击相邻同牌，或拖动麻将进入空位');checkGameState()}
 function openRestartConfirm(){if(ended){fresh();return}if(paused||animating)return;elapsedBase=elapsed();paused=true;bgMusic.pause();$('restartModal').classList.remove('hidden');status('请确认是否重新开始')}
 function cancelRestart(){if(ended)return;$('restartModal').classList.add('hidden');startedAt=Date.now();paused=false;startMusic();status('继续当前游戏')}
@@ -198,14 +198,15 @@ function playerName(){return ($('playerName').value.trim()||'匿名玩家').slic
 function snapshot(){return {grid:grid.map(row=>row.map(card=>card?.id||null)),hints,bombs,gameMode,timeLimitSeconds}}
 const PENDING_SAVE_KEY='mahjong-pending-saves';
 const PENDING_SCORE_KEY='mahjong-pending-scores';
-let scoreSyncRunning=false;
+let scoreSyncRunning=false,rankRequestVersion=0;
+const settingsNewGame=document.createElement('button');settingsNewGame.id='settingsNewGame';settingsNewGame.className='hidden';settingsNewGame.textContent='↻ 新的一局';settingsNewGame.onclick=()=>{$('settingsModal').classList.add('hidden');fresh()};$('settingsModal').querySelector('.menu-actions').prepend(settingsNewGame);
 function readPendingScores(){try{return JSON.parse(localStorage.getItem(PENDING_SCORE_KEY)||'[]')}catch{return []}}
 async function boundedFetch(url,options={}){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6000);try{return await fetch(url,{...options,signal:controller.signal})}finally{clearTimeout(timer)}}
 async function syncPendingScores(){
   if(!navigator.onLine||scoreSyncRunning)return;scoreSyncRunning=true;
   try{for(const record of readPendingScores()){
     try{const response=await boundedFetch('/api/end',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(record)});if(!response.ok)throw new Error('upload failed');localStorage.setItem(PENDING_SCORE_KEY,JSON.stringify(readPendingScores().filter(item=>item.recordId!==record.recordId)));if($('resultSummary').dataset.recordId===record.recordId)$('resultSummary').textContent=$('resultSummary').textContent.replace('成绩已保存在本机，联网后自动上传。','成绩已同步到排行榜。')}catch{break}
-  }}finally{scoreSyncRunning=false}
+  }}finally{scoreSyncRunning=false;if(!$('rankModal').classList.contains('hidden'))void showLeaderboard(!$('resultSummary').classList.contains('hidden'))}
 }
 function readPendingSaves(){try{const saves=JSON.parse(localStorage.getItem(PENDING_SAVE_KEY)||'[]');return Array.isArray(saves)?saves:[]}catch{return []}}
 function queuePendingSave(payload){const pending=readPendingSaves().filter(item=>item.saveId!==payload.saveId);pending.push(payload);localStorage.setItem(PENDING_SAVE_KEY,JSON.stringify(pending.slice(-30)))}
@@ -249,8 +250,9 @@ async function loadGame(){
   entries.forEach(entry=>{const button=document.createElement('button');button.className='save-entry';const title=document.createElement('strong'),meta=document.createElement('span');title.textContent=saveTime(entry.savedAt);meta.textContent=`${entry.score||0} 分 · 本局 ${formatTime(entry.elapsedSeconds||0)}${entry.source==='local'?' · 本机':''}`;button.append(title,meta);button.onclick=()=>restoreSave(entry);list.append(button)})
 }
 async function showLeaderboard(isResult=false){
+  const requestVersion=++rankRequestVersion;
   $('settingsModal').classList.add('hidden');$('rankModal').classList.remove('hidden');$('rankTitle').textContent=isResult?'本局结束':'排行榜';$('resultSummary').classList.toggle('hidden',!isResult);$('rankRestart').classList.toggle('hidden',!isResult);$('rankBody').innerHTML='<tr><td colspan="4">加载中…</td></tr>';
-  try{const response=await boundedFetch('/api/leaderboard'),data=await response.json();if(response.headers.get('X-Mahjong-Offline'))$('rankTitle').textContent=`${isResult?'本局结束':'排行榜'}（离线缓存）`;$('rankBody').innerHTML=data.entries.length?data.entries.map((entry,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(entry.playerName)}<small>${entry.recordType==='completed'?'完成':'存档'} · ${saveTime(entry.recordedAt)}</small></td><td>${entry.score}</td><td>${formatTime(entry.durationSeconds)}</td></tr>`).join(''):'<tr><td colspan="4">还没有记录</td></tr>'}catch{$('rankBody').innerHTML='<tr><td colspan="4">离线且暂无排行榜缓存</td></tr>'}
+  try{const response=await boundedFetch('/api/leaderboard'),data=await response.json();if(requestVersion!==rankRequestVersion)return;if(response.headers.get('X-Mahjong-Offline'))$('rankTitle').textContent=`${isResult?'本局结束':'排行榜'}（离线缓存）`;$('rankBody').innerHTML=data.entries.length?data.entries.map((entry,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(entry.playerName)}<small>${entry.recordType==='completed'?'完成':'存档'} · ${saveTime(entry.recordedAt)}</small></td><td>${entry.score}</td><td>${formatTime(entry.durationSeconds)}</td></tr>`).join(''):'<tr><td colspan="4">还没有记录</td></tr>'}catch{if(requestVersion!==rankRequestVersion)return;$('rankBody').innerHTML='<tr><td colspan="4">离线且暂无排行榜缓存</td></tr>'}
 }
 function escapeHtml(value){const el=document.createElement('span');el.textContent=value;return el.innerHTML}
 async function endGame(prefix=''){
